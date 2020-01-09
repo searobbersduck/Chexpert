@@ -1,10 +1,12 @@
+from multiprocessing import set_start_method
+
 import sys
 import os
 import argparse
 import logging
 import json
 import time
-import subprocess
+# import subprocess
 from shutil import copyfile
 
 import numpy as np
@@ -26,6 +28,9 @@ from data.dataset import ImageDataset  # noqa
 from model.classifier import Classifier  # noqa
 from utils.misc import lr_schedule  # noqa
 from model.utils import get_optimizer  # noqa
+
+import warnings
+warnings.filterwarnings('ignore')
 
 parser = argparse.ArgumentParser(description='Train model')
 parser.add_argument('cfg_path', default=None, metavar='CFG_PATH', type=str,
@@ -52,10 +57,10 @@ def get_loss(output, target, index, device, cfg):
         target = target[:, index].view(-1)
         pos_weight = torch.from_numpy(
             np.array(cfg.pos_weight,
-                     dtype=np.float32)).to(device).type_as(target)
+                     dtype=np.float32)).cuda().type_as(target)
         if cfg.batch_weight:
             if target.sum() == 0:
-                loss = torch.tensor(0., requires_grad=True).to(device)
+                loss = torch.tensor(0., requires_grad=True).cuda()
             else:
                 weight = (target.size()[0] - target.sum()) / target.sum()
                 loss = F.binary_cross_entropy_with_logits(
@@ -89,8 +94,11 @@ def train_epoch(summary, summary_dev, cfg, args, model, dataloader,
     acc_sum = np.zeros(num_tasks)
     for step in range(steps):
         image, target = next(dataiter)
-        image = image.to(device)
-        target = target.to(device)
+        # image = image.to(device)
+        # target = target.to(device)
+
+        image = image.cuda()
+        target = target.cuda()
         output, logit_map = model(image)
 
         # different number of tasks
@@ -125,10 +133,10 @@ def train_epoch(summary, summary_dev, cfg, args, model, dataloader,
 
             for t in range(num_tasks):
                 summary_writer.add_scalar(
-                    'train/loss_{}'.format(label_header[t]), loss_sum[t],
+                    'train/loss_{}'.format(label_header[t].replace(' ', '')), loss_sum[t],
                     summary['step'])
                 summary_writer.add_scalar(
-                    'train/acc_{}'.format(label_header[t]), acc_sum[t],
+                    'train/acc_{}'.format(label_header[t].replace(' ', '')), acc_sum[t],
                     summary['step'])
 
             loss_sum = np.zeros(num_tasks)
@@ -170,13 +178,13 @@ def train_epoch(summary, summary_dev, cfg, args, model, dataloader,
 
             for t in range(len(cfg.num_classes)):
                 summary_writer.add_scalar(
-                    'dev/loss_{}'.format(dev_header[t]),
+                    'dev/loss_{}'.format(dev_header[t].replace(' ', '')),
                     summary_dev['loss'][t], summary['step'])
                 summary_writer.add_scalar(
-                    'dev/acc_{}'.format(dev_header[t]), summary_dev['acc'][t],
+                    'dev/acc_{}'.format(dev_header[t].replace(' ', '')), summary_dev['acc'][t],
                     summary['step'])
                 summary_writer.add_scalar(
-                    'dev/auc_{}'.format(dev_header[t]), summary_dev['auc'][t],
+                    'dev/auc_{}'.format(dev_header[t].replace(' ', '')), summary_dev['auc'][t],
                     summary['step'])
 
             save_best = False
@@ -244,8 +252,11 @@ def test_epoch(summary, cfg, args, model, dataloader):
     true_list = list(x for x in range(len(cfg.num_classes)))
     for step in range(steps):
         image, target = next(dataiter)
-        image = image.to(device)
-        target = target.to(device)
+        # image = image.to(device)
+        # target = target.to(device)
+
+        image = image.cuda()
+        target = target.cuda()
         output, logit_map = model(image)
         # different number of tasks
         for t in range(len(cfg.num_classes)):
@@ -290,11 +301,11 @@ def run(args):
 
     device_ids = list(map(int, args.device_ids.split(',')))
     num_devices = torch.cuda.device_count()
-    if num_devices < len(device_ids):
-        raise Exception(
-            '#available gpu : {} < --device_ids : {}'
-            .format(num_devices, len(device_ids)))
-    device = torch.device('cuda:{}'.format(device_ids[0]))
+    # if num_devices < len(device_ids):
+    #     raise Exception(
+    #         '#available gpu : {} < --device_ids : {}'
+    #         .format(num_devices, len(device_ids)))
+    # device = torch.device('cuda:{}'.format(device_ids[0]))
 
     model = Classifier(cfg)
     if args.verbose is True:
@@ -303,8 +314,10 @@ def run(args):
             h, w = cfg.long_side, cfg.long_side
         else:
             h, w = cfg.height, cfg.width
-        summary(model.to(device), (3, h, w))
-    model = DataParallel(model, device_ids=device_ids).to(device).train()
+        summary(model.cuda(), (3, h, w))
+    # model = DataParallel(model, device_ids=device_ids).to(device).train()
+    model1 = DataParallel(model).cuda()
+    model = DataParallel(model).cuda().train()
     if args.pre_train is not None:
         if os.path.exists(args.pre_train):
             ckpt = torch.load(args.pre_train, map_location=device)
@@ -313,14 +326,15 @@ def run(args):
 
     src_folder = os.path.dirname(os.path.abspath(__file__)) + '/../'
     dst_folder = os.path.join(args.save_path, 'classification')
-    rc, size = subprocess.getstatusoutput('du --max-depth=0 %s | cut -f1'
-                                          % src_folder)
-    if rc != 0:
-        raise Exception('Copy folder error : {}'.format(rc))
-    rc, err_msg = subprocess.getstatusoutput('cp -R %s %s' % (src_folder,
-                                                              dst_folder))
-    if rc != 0:
-        raise Exception('copy folder error : {}'.format(err_msg))
+    os.makedirs(dst_folder, exist_ok=True)
+    # rc, size = subprocess.getstatusoutput('du --max-depth=0 %s | cut -f1'
+    #                                       % src_folder)
+    # if rc != 0:
+    #     raise Exception('Copy folder error : {}'.format(rc))
+    # rc, err_msg = subprocess.getstatusoutput('cp -R %s %s' % (src_folder,
+    #                                                           dst_folder))
+    # if rc != 0:
+    #     raise Exception('copy folder error : {}'.format(err_msg))
 
     copyfile(cfg.train_csv, os.path.join(args.save_path, 'train.csv'))
     copyfile(cfg.dev_csv, os.path.join(args.save_path, 'dev.csv'))
@@ -363,7 +377,7 @@ def run(args):
             param_group['lr'] = lr
 
         summary_train, best_dict = train_epoch(
-            summary_train, summary_dev, cfg, args, model,
+            summary_train, summary_dev, cfg, args, model1,
             dataloader_train, dataloader_dev, optimizer,
             summary_writer, best_dict, dev_header)
 
@@ -402,13 +416,13 @@ def run(args):
 
         for t in range(len(cfg.num_classes)):
             summary_writer.add_scalar(
-                'dev/loss_{}'.format(dev_header[t]), summary_dev['loss'][t],
+                'dev/loss_{}'.format(dev_header[t].replace(' ', '')), summary_dev['loss'][t],
                 summary_train['step'])
             summary_writer.add_scalar(
-                'dev/acc_{}'.format(dev_header[t]), summary_dev['acc'][t],
+                'dev/acc_{}'.format(dev_header[t].replace(' ', '')), summary_dev['acc'][t],
                 summary_train['step'])
             summary_writer.add_scalar(
-                'dev/auc_{}'.format(dev_header[t]), summary_dev['auc'][t],
+                'dev/auc_{}'.format(dev_header[t].replace(' ', '')), summary_dev['auc'][t],
                 summary_train['step'])
 
         save_best = False
@@ -474,4 +488,5 @@ def main():
 
 
 if __name__ == '__main__':
+    set_start_method('spawn')
     main()
