@@ -58,9 +58,12 @@ we test it on 200 patients dataset, got the **AUC** as below:
 * [http://www.jfhealthcare.com/](http://www.jfhealthcare.com/)
 
 
-
-
-
-
-
-
+### 修改记录
+1. `train.py`
+   *  修改了`.cuda()`
+   *  修改了多进程的调度方式
+   *  修改了输出带空格的名字时，出现的警告
+2. 数据路径
+   * 针对小数据集，将数据路径做如下链接：`ln -s /data/zhangwd/data/external/xray/CheXpert_512/CheXpert-v1.0-small ./CheXpert-v1.0-small`, `ln -s ${datapath}/CheXpert-v1.0-small ./CheXpert-v1.0-small`
+3. 运行脚本
+   * 
