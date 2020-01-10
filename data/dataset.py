@@ -102,6 +102,7 @@ class ImageDataset(Dataset):
         return image
 
     def __getitem__(self, idx):
+        print(self._image_paths[idx])
         image = cv2.imread(self._image_paths[idx], 0)
         image = Image.fromarray(image)
         if self._mode == 'train':
