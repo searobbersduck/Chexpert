@@ -65,9 +65,24 @@ we test it on 200 patients dataset, got the **AUC** as below:
    *  修改了输出带空格的名字时，出现的警告
 2. 数据路径
    * 针对小数据集，将数据路径做如下链接：`ln -s /data/zhangwd/data/external/xray/CheXpert_512/CheXpert-v1.0-small ./CheXpert-v1.0-small`, `ln -s ${datapath}/CheXpert-v1.0-small ./CheXpert-v1.0-small`
-3. 运行脚本
+3. 训练脚本
    * 训练脚本：`chexpert_task_gpu4.sh`, 目前能够运行的脚本（lse_fpa, lse_cam, avgmax_cam）(时间点：2020.1.10)，需要修改其中的配置文件中的文件路径：
      *     ``` "train_csv": "CheXpert-v1.0-small/train.csv",
             "dev_csv": "CheXpert-v1.0-small/valid.csv",
             ```
-    * 测试脚本：
+4. test
+   * 在做test之前，需要先训练生成相应的模型，具体存放在模型路径下，test程序中默认的会调用`best1.ckpt`模型
+   * `CUDA_VISIBLE_DEVICES=7 python bin/test.py --model_path ./logdir/lse_fpa/ --in_csv_path ./logdir/lse_fpa/dev.csv`
+
+1. plot roc
+   * `CUDA_VISIBLE_DEVICES=7 python bin/roc.py Edema --pred_csv_path test/test.csv --true_csv_path ./logdir/lse_fpa/dev.csv`
+   * 在`config/lse_fpa.json`配置文件下，5个epoch的结果：
+   * ``` 
+        Cardiomegaly auc 0.8331071913161466
+        Edema auc 0.9339963833634719
+        Consolidation auc 0.9203869047619048
+        Atelectasis auc 0.8900266666666666
+        Pleural Effusion auc 0.9278492647058822
+     ```
+    * roc曲线位于`test/`路径下
+    * ***问题：上述auc的validation数据和画roc的数据是一样的，正常应该使用专门的test数据集***
